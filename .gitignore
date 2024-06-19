@@ -1,0 +1,13 @@
+*DS_Store
+*.pth
+__pycache__/
+datasets/
+pretained/
+pretrained/ViT-B-16.pt
+pretrained/images_embeds.npy
+pretrained/questions_states.npy
+tmp/
+.vim-arsync
+BLIP
+output.txt
+system/AzureFunctionsInvocationTraceForTwoWeeksJan2021.txt
