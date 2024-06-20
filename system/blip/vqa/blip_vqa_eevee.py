@@ -28,18 +28,26 @@ def send_and_receive(request_queue,request_events,processed_results):
 
         request_batch_size=1
         
-        for request_num in [2,4,8,16,32,64]:
+        for request_num in [2,4,8,16,32]:
             print(f"\nrequest_num: {request_num}")
 
             for repeat_time in range(3):
+
+                print()
 
                 request_list=[dataset[i*request_batch_size:(i+1)*request_batch_size] for i in range(request_num)]
                 # [[{},],]
 
                 images_batches = [np.array([bytes(os.path.join(dataset_dir, data["image"]), "utf-8") for data in datas]) for datas in request_list]
                 texts_batches = [np.array([bytes(os.path.join(dataset_dir, data["question"]), "utf-8") for data in datas]) for datas in request_list]
-                livings_batches = [np.array([-1 for data in datas]) for datas in request_list]
+                livings_batches = [np.array([-1 for data in datas],dtype=np.int16) for datas in request_list]
                 # [(request_batch_size,),]
+
+                '''
+                if repeat_time==0:
+                    print(images_batches)
+                    print(texts_batches)
+                '''
 
                 request_ids, batch_nums=[],[]
                 for i in range(request_num):
@@ -69,6 +77,7 @@ def send_and_receive(request_queue,request_events,processed_results):
                 # for e in end_times:
                 #     print(e-start_time)
                 if repeat_time==2:
+                    #print([e-start_time for e in end_times])
                     print(f"total time: {end_times[-1]-start_time}")
                     print(f"avg time: {sum(end_times)/len(end_times)-start_time}")
 
@@ -92,6 +101,8 @@ if __name__ == "__main__":
         if len(sys.argv) > 1:
             fix_batch = [int(x) for x in sys.argv[1].split(',')]
 
+        remove_duplication=False
+
         # Create a list to hold process objects
         processes = []
 
@@ -106,7 +117,7 @@ if __name__ == "__main__":
         request_events=manager.dict()
         processed_results = manager.dict()
 
-        blip_vqa_process_process = multiprocessing.Process(target=blip_vqa_process, args=(request_queue,request_events,processed_results,batch_size_queue,fix_batch))
+        blip_vqa_process_process = multiprocessing.Process(target=blip_vqa_process, args=(request_queue,request_events,processed_results,batch_size_queue,fix_batch,remove_duplication))
         processes.append(blip_vqa_process_process)
         blip_vqa_process_process.start()
         

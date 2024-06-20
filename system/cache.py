@@ -51,19 +51,23 @@ class LRUCache:
         self.end_time_cache.move_to_end(key,last=True)
 
 
-def remove_duplication_cache(my_cache,images:np,livings:np):
+def remove_duplication_cache(my_cache,images:np,livings:np,remove_duplication):
     # print("remove_duplication_cache")
     # print("images.shape")
     # print(images.shape)
     # print("livings.shape")
     # print(livings.shape)
-    # remove duplication in a batch
-    unique_images,return_index = np.unique(images,return_index=True)
-    # stable unique, keep the order in images
-    sorted_indices = np.argsort(return_index)
-    unique_images = unique_images[sorted_indices]
-    livings=livings[sorted_indices]
-    # todo: find the max living of the same image
+
+    if remove_duplication:
+        # remove duplication in a batch
+        unique_images,return_index = np.unique(images,return_index=True)
+        # stable unique, keep the order in images
+        sorted_indices = np.argsort(return_index)
+        unique_images = unique_images[sorted_indices]
+        livings=livings[sorted_indices]
+        # todo: find the max living of the same image
+    else:
+        unique_images=images# todo: find the max living of the same image
 
     # print("livings.shape")
     # print(livings.shape)
@@ -136,13 +140,13 @@ def recover_cache_duplication(images:np,unique_images:np,cached_images_result:np
     return recover_images_from_duplication,mask
 
 
-def cache_get_put(cache_get_input_queue,cache_get_output_queue,cache_put_queue,capacity=1000):
+def cache_get_put(cache_get_input_queue,cache_get_output_queue,cache_put_queue,remove_duplication,capacity=1000):
     try:
         image_cache=LRUCache(capacity)
         while True:
             try:
                 images,livings=cache_get_input_queue.get(block=False)
-                cache_get_output_queue.put(remove_duplication_cache(image_cache,images,livings),block=False)
+                cache_get_output_queue.put(remove_duplication_cache(image_cache,images,livings,remove_duplication),block=False)
             except queue.Empty:
                 pass
             try:

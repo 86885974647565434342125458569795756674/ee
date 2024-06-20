@@ -49,7 +49,7 @@ def while_client(model_name,input_queue,output_queue):
     except KeyboardInterrupt:
         pass
 
-def blip_vqa_visual_encoder_task(input_queue,output_queue):
+def blip_vqa_visual_encoder_task(input_queue,output_queue,remove_duplication=True):
     try:
         processes=[]
         
@@ -62,7 +62,7 @@ def blip_vqa_visual_encoder_task(input_queue,output_queue):
         cache_get_input_queue=multiprocessing.Queue()
         cache_get_output_queue=multiprocessing.Queue()
         cache_put_queue=multiprocessing.Queue()
-        cache_process=multiprocessing.Process(target=cache_get_put,args=(cache_get_input_queue,cache_get_output_queue,cache_put_queue,))
+        cache_process=multiprocessing.Process(target=cache_get_put,args=(cache_get_input_queue,cache_get_output_queue,cache_put_queue,remove_duplication))
         processes.append(cache_process)
         cache_process.start()
 
@@ -280,7 +280,7 @@ def blip_vqa_text_decoder_task(input_queue,pre_stage_queue,output_queue):
             process.join()
 
 
-def blip_vqa_process(request_queue,request_events,processed_results,batch_size_queue,fix_batch=None):
+def blip_vqa_process(request_queue,request_events,processed_results,batch_size_queue,fix_batch,remove_duplication):
     try:
         # write_file="/workspace/blip_vqa_process.txt"
         # if(os.path.isfile(write_file)):    
@@ -292,7 +292,7 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
         # input
         blip_vqa_visual_encoder_blip_vqa_text_encoder_queue=multiprocessing.Queue()
         # output
-        blip_vqa_visual_encoder_task_process=multiprocessing.Process(target=blip_vqa_visual_encoder_task,args=(blip_vqa_visual_encoder_batches_queue,blip_vqa_visual_encoder_blip_vqa_text_encoder_queue,))
+        blip_vqa_visual_encoder_task_process=multiprocessing.Process(target=blip_vqa_visual_encoder_task,args=(blip_vqa_visual_encoder_batches_queue,blip_vqa_visual_encoder_blip_vqa_text_encoder_queue,remove_duplication))
         processes.append(blip_vqa_visual_encoder_task_process)
         blip_vqa_visual_encoder_task_process.start()
 
@@ -314,14 +314,13 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
 
         if fix_batch is not None:
             blip_vqa_visual_encoder_batch_size,blip_vqa_text_encoder_batch_size,blip_vqa_text_decoder_batch_size=fix_batch
-            print(f"fix batch sizes: {blip_vqa_visual_encoder_batch_size},{blip_vqa_text_encoder_batch_size},{blip_vqa_text_decoder_batch_size}")
         
         while True:
             if fix_batch is None:
                 try:
                     batch_sizes=batch_size_queue.get(block=False)
                     blip_vqa_visual_encoder_batch_size,blip_vqa_text_encoder_batch_size,blip_vqa_text_decoder_batch_size=batch_sizes
-                    print(f"update batch sizes: {batch_sizes}")
+#                    print(f"update batch sizes: {batch_sizes}")
                 except queue.Empty:
                     pass
             if not request_queue.empty():
@@ -332,6 +331,8 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
                 texts=np.concatenate(texts, axis=0)
                 livings=np.concatenate(livings, axis=0)
                 # (xxx,)
+
+                print(f"batch sizes: {blip_vqa_visual_encoder_batch_size},{blip_vqa_text_encoder_batch_size},{blip_vqa_text_decoder_batch_size}")
 
                 blip_vqa_visual_encoder_batches_queue.put((images,blip_vqa_visual_encoder_batch_size,livings),block=False)            
 
