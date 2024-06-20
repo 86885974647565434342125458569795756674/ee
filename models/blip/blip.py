@@ -20,6 +20,8 @@ import os
 from urllib.parse import urlparse
 from timm.models.hub import download_cached_file
 
+root_path="/dynamic_batch/ee/"
+save_directory=root_path+"pretrained/"
 
 class BLIP_Base(nn.Module):
 
@@ -219,7 +221,8 @@ def blip_feature_extractor(pretrained='', **kwargs):
 
 
 def init_tokenizer():
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    #tokenizer = BertTokenizer.from_pretrained('bert-base-uncased',cache_dir=save_directory+"bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained(save_directory+"bert-base-uncased/models--bert-base-uncased/snapshots/86b5e0934494bd15c9632b12f734a8a67f723594/")
     tokenizer.add_special_tokens({'bos_token': '[DEC]'})
     tokenizer.add_special_tokens({'additional_special_tokens': ['[ENC]']})
     tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]
@@ -287,5 +290,5 @@ def load_checkpoint(model, url_or_filename):
                 del state_dict[key]
 
     msg = model.load_state_dict(state_dict, strict=False)
-    print('load checkpoint from %s' % url_or_filename)
+    #print('load checkpoint from %s' % url_or_filename)
     return model, msg

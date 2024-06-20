@@ -2,6 +2,8 @@ from collections import OrderedDict
 import numpy as np
 import queue
 import time
+import heapq
+# todo
 
 class LRUCache:
     def __init__(self, capacity):
@@ -9,27 +11,34 @@ class LRUCache:
         self.cache = OrderedDict()
         self.start_time_cache = OrderedDict()
         self.living_cache = OrderedDict()
+        self.end_time_cache = OrderedDict()
 
     def get(self, key):
         if key in self.cache:
-            if time.time()-self.start_time_cache[key]<self.living_cache[key]:
+            if time.time()<self.end_time_cache[key]:
                 self.cache.move_to_end(key,last=True)
                 self.start_time_cache[key]=time.time()
                 self.start_time_cache.move_to_end(key,last=True)
                 self.living_cache.move_to_end(key,last=True)
+                self.end_time_cache[key]=self.start_time_cache[key]+self.living_cache[key]
+                self.end_time_cache.move_to_end(key,last=True)
                 return self.cache[key]  
             # in but timeout   
             del self.cache[key]
             del self.start_time_cache[key]
             del self.living_cache[key]
+            del self.end_time_cache[key]
         return None
 
-    def put(self, key, value,living=60*60*24*7):
+    def put(self, key, value, living=60*60*24*7):
         if living==-1:
             # no cache
             return
+        
         if key not in self.cache and len(self.cache) >= self.capacity:
             self.cache.popitem(last=False)
+            self.start_time_cache.popitem(last=False)
+            self.living_cache.popitem(last=False)
             self.end_time_cache.popitem(last=False)
 
         self.cache[key] = value
@@ -38,6 +47,8 @@ class LRUCache:
         self.start_time_cache.move_to_end(key,last=True)
         self.living_cache[key]=living
         self.living_cache.move_to_end(key,last=True)
+        self.end_time_cache[key]=self.start_time_cache[key]+living
+        self.end_time_cache.move_to_end(key,last=True)
 
 
 def remove_duplication_cache(my_cache,images:np,livings:np):
@@ -52,6 +63,8 @@ def remove_duplication_cache(my_cache,images:np,livings:np):
     sorted_indices = np.argsort(return_index)
     unique_images = unique_images[sorted_indices]
     livings=livings[sorted_indices]
+    # todo: find the max living of the same image
+
     # print("livings.shape")
     # print(livings.shape)
 
@@ -93,6 +106,7 @@ def recover_once(images:np,unique_images:np,cached_images_result:np):
         recover_images_from_duplication[i_indices]=element
     return recover_images_from_duplication
 
+
 def recover_cache_duplication(images:np,unique_images:np,cached_images_result:np,no_forward_indices:np,unique_images_after_forward:np,forward_indices:np,recover_images_from_duplication:np,mask:np):
     # print("forward_indices")
     # print(forward_indices)
@@ -120,6 +134,7 @@ def recover_cache_duplication(images:np,unique_images:np,cached_images_result:np
         mask[i_indices]=True
 
     return recover_images_from_duplication,mask
+
 
 def cache_get_put(cache_get_input_queue,cache_get_output_queue,cache_put_queue,capacity=1000):
     try:

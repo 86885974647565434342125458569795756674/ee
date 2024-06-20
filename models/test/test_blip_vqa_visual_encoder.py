@@ -4,12 +4,10 @@ import os
 import sys
 import time
 
-root_path='/dynamic_batch/triton-multi-modal-serving'
+root_path='/dynamic_batch/ee/'
 
 sys.path.append(root_path)
 from models.blip.blip_vqa_visual_encoder import blip_vqa_visual_encoder
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #image_size = 480
 #image2 = load_example_image(image_size=image_size)
@@ -27,12 +25,11 @@ print(f"bs={bs}")
 images=np.array([[root_path.encode('utf-8')+b"/demos/images/merlion.png"]])
 images = np.repeat(images,bs,axis=0)
 
-model_url = root_path+"/pretrained/model_base_vqa_capfilt_large.pth"
+model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
 model = blip_vqa_visual_encoder(pretrained=model_url, vit="base")
 
 model.eval()
 #print(sum(p.numel() for p in model.parameters()))
-model = model.to(device)
 
 with torch.no_grad():
     images_embeds = model(images)
@@ -40,7 +37,7 @@ with torch.no_grad():
 #start_time=time.time()
 with torch.no_grad():
     images_embeds = model(images)
-#print(images_embeds.shape,images_embeds.dtype)
+print(images_embeds.shape,images_embeds.dtype)
 #end_time=time.time()
 #print(f"time={end_time-start_time}")
 

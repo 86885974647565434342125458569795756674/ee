@@ -1,17 +1,53 @@
 import numpy as np
-from PIL import Image
 import torch
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
-import tritonclient.http as httpclient
-from tritonclient.utils import *
 import time
 import multiprocessing
 import queue
 import random
 import os
-from cache import cache_get_put,recover_cache_duplication,recover_once
-from utils import while_client
+import sys
+
+root_path='/dynamic_batch/ee/'
+
+sys.path.append(root_path)
+from system.cache import cache_get_put,recover_cache_duplication,recover_once
+from models.blip.blip_vqa_visual_encoder import blip_vqa_visual_encoder
+from models.blip.blip_vqa_text_encoder import blip_vqa_text_encoder
+from models.blip.blip_vqa_text_decoder import blip_vqa_text_decoder
+
+def while_client(model_name,input_queue,output_queue):
+    try:
+        model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        
+        if model_name=="blip_vqa_visual_encoder":
+            model = blip_vqa_visual_encoder(pretrained=model_url, vit="base")
+            model.eval()
+            with torch.no_grad():
+                while True:    
+                    input_data=input_queue.get(block=True)
+                    print(f"batch size of {model_name}={input_data.shape}")
+                    output_queue.put(model(input_data),block=False)
+        elif model_name=="blip_vqa_text_encoder":
+            model = blip_vqa_text_encoder(pretrained=model_url, vit="base")
+            model.eval()
+            with torch.no_grad():
+                while True:    
+                    input_data0,input_data1=input_queue.get(block=True)
+                    print(f"batch size of {model_name}={input_data0.shape}")
+                    output_queue.put(model(input_data0,input_data1),block=False)
+        else:
+            model = blip_vqa_text_decoder(pretrained=model_url, vit="base")
+            model.eval()
+            with torch.no_grad():
+                while True:    
+                    input_data0,input_data1=input_queue.get(block=True)
+                    print(f"batch size of {model_name}={input_data0.shape}")
+                    output_queue.put(model(input_data0,input_data1),block=False)
+         
+    except KeyboardInterrupt:
+        pass
 
 def blip_vqa_visual_encoder_task(input_queue,output_queue):
     try:
@@ -35,6 +71,7 @@ def blip_vqa_visual_encoder_task(input_queue,output_queue):
             cache_get_input_queue.put((images,livings),block=False)
             unique_images,cached_images_result,no_forward_indices,unique_images_forward,forward_indices,livings_forward=cache_get_output_queue.get()
             
+            # split batch
             if unique_images_forward.shape[0]==0:
                 blip_vqa_visual_encoder_batches=[]                    
                 forward_indices_batches=[]
@@ -91,6 +128,7 @@ def blip_vqa_visual_encoder_task(input_queue,output_queue):
                     # the last indice of cached can be forward in this time
                 if recover_images_from_duplication is None:
                     recover_images_from_duplication=np.empty((images.shape[0],*(output_per_batch.shape[1:])),dtype=output_per_batch.dtype)
+                    # todo: image is same size, what about text?
                     mask=np.full(images.shape[0],False)
 
                 recover_images_from_duplication,mask=recover_cache_duplication(images,unique_images,cached_images_result[no_forward_indices_indice_start:no_forward_indices_indice+1],no_forward_indices[no_forward_indices_indice_start:no_forward_indices_indice+1],output_per_batch,forward_indices_batches[i],recover_images_from_duplication,mask)
@@ -135,12 +173,11 @@ def blip_vqa_text_encoder_task(input_queue,pre_stage_queue,output_queue):
                 else:
                     blip_vqa_text_encoder_batches=np.split(texts,num_blip_vqa_text_encoder_batch)
 
-            text_batch_num=len(blip_vqa_text_encoder_batches)
-            # print(text_batch_num)
+
             text_batch_input_count=0
             text_batch_output_count=0
             now_left=None
-            while text_batch_input_count<text_batch_num or text_batch_output_count<text_batch_num:
+            while text_batch_input_count<num_blip_vqa_text_encoder_batch or text_batch_output_count<num_blip_vqa_text_encoder_batch:
                 # cache pad image replication
                 try:
                     images_per_batch=pre_stage_queue.get(block=False)
@@ -152,7 +189,7 @@ def blip_vqa_text_encoder_task(input_queue,pre_stage_queue,output_queue):
                 except queue.Empty:
                     pass
 
-                while now_left is not None and text_batch_input_count<text_batch_num and now_left.shape[0]>=blip_vqa_text_encoder_batches[text_batch_input_count].shape[0]:
+                while now_left is not None and text_batch_input_count<num_blip_vqa_text_encoder_batch and now_left.shape[0]>=blip_vqa_text_encoder_batches[text_batch_input_count].shape[0]:
                     # print(blip_vqa_text_encoder_batches[text_batch_input_count])
                     blip_vqa_text_encoder_input_queue.put((now_left[:blip_vqa_text_encoder_batches[text_batch_input_count].shape[0]],blip_vqa_text_encoder_batches[text_batch_input_count]),block=False)
                     now_left=now_left[blip_vqa_text_encoder_batches[text_batch_input_count].shape[0]:]
@@ -209,11 +246,10 @@ def blip_vqa_text_decoder_task(input_queue,pre_stage_queue,output_queue):
                 else:
                     blip_vqa_text_decoder_batches=np.split(texts,num_blip_vqa_text_decoder_batch)
 
-            text_batch_num=len(blip_vqa_text_decoder_batches)
             text_batch_input_count=0
             text_batch_output_count=0
             now_left_data,now_left_mask=None,None
-            while text_batch_input_count<text_batch_num or text_batch_output_count<text_batch_num:
+            while text_batch_input_count<num_blip_vqa_text_decoder_batch or text_batch_output_count<num_blip_vqa_text_decoder_batch:
                 try:
                     texts_per_batch=pre_stage_queue.get(block=False)
                     if now_left_data is None:
@@ -226,7 +262,7 @@ def blip_vqa_text_decoder_task(input_queue,pre_stage_queue,output_queue):
                 except queue.Empty:
                     pass
 
-                while now_left_data is not None and text_batch_input_count<text_batch_num and now_left_data.shape[0]>=blip_vqa_text_decoder_batches[text_batch_input_count].shape[0]:
+                while now_left_data is not None and text_batch_input_count<num_blip_vqa_text_decoder_batch and now_left_data.shape[0]>=blip_vqa_text_decoder_batches[text_batch_input_count].shape[0]:
                     # print(blip_vqa_text_decoder_batches[text_batch_input_count])
                     blip_vqa_text_decoder_input_queue.put((now_left_data[:blip_vqa_text_decoder_batches[text_batch_input_count].shape[0]],now_left_mask[:blip_vqa_text_decoder_batches[text_batch_input_count].shape[0]]),block=False)
                     now_left_data=now_left_data[blip_vqa_text_decoder_batches[text_batch_input_count].shape[0]:]
@@ -243,17 +279,8 @@ def blip_vqa_text_decoder_task(input_queue,pre_stage_queue,output_queue):
         for process in processes:
             process.join()
 
-def change_batch_size(batch_size_queue,time_interval):
-    try:
-        while True:
-            a,b,c=random.randint(1, 10),random.randint(1, 10),random.randint(1, 10)
-            batch_size_queue.put((a,b,c),block=False)
-            # print(f"release batch size: {a},{b},{c}")
-            time.sleep(time_interval)
-    except KeyboardInterrupt:
-        pass
 
-def blip_vqa_process(request_queue,request_events,processed_results,batch_size_queue,fix_batch=False):
+def blip_vqa_process(request_queue,request_events,processed_results,batch_size_queue,fix_batch=None):
     try:
         # write_file="/workspace/blip_vqa_process.txt"
         # if(os.path.isfile(write_file)):    
@@ -261,31 +288,36 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
 
         processes = []
 
-        blip_vqa_visual_encoder_blip_vqa_text_encoder_queue=multiprocessing.Queue()
-        blip_vqa_text_encoder_blip_vqa_text_decoder_queue=multiprocessing.Queue()
-
         blip_vqa_visual_encoder_batches_queue=multiprocessing.Queue()
+        # input
+        blip_vqa_visual_encoder_blip_vqa_text_encoder_queue=multiprocessing.Queue()
+        # output
         blip_vqa_visual_encoder_task_process=multiprocessing.Process(target=blip_vqa_visual_encoder_task,args=(blip_vqa_visual_encoder_batches_queue,blip_vqa_visual_encoder_blip_vqa_text_encoder_queue,))
         processes.append(blip_vqa_visual_encoder_task_process)
         blip_vqa_visual_encoder_task_process.start()
 
         blip_vqa_text_encoder_batches_queue=multiprocessing.Queue()
+        # input
+        blip_vqa_text_encoder_blip_vqa_text_decoder_queue=multiprocessing.Queue()
+        # output
         blip_vqa_text_encoder_task_process=multiprocessing.Process(target=blip_vqa_text_encoder_task,args=(blip_vqa_text_encoder_batches_queue,blip_vqa_visual_encoder_blip_vqa_text_encoder_queue,blip_vqa_text_encoder_blip_vqa_text_decoder_queue,))
         processes.append(blip_vqa_text_encoder_task_process)
         blip_vqa_text_encoder_task_process.start()
 
         blip_vqa_text_decoder_batches_queue=multiprocessing.Queue()
+        # input
         blip_vqa_text_decoder_batches_return_queue=multiprocessing.Queue()
+        # output
         blip_vqa_text_decoder_task_process=multiprocessing.Process(target=blip_vqa_text_decoder_task,args=(blip_vqa_text_decoder_batches_queue,blip_vqa_text_encoder_blip_vqa_text_decoder_queue,blip_vqa_text_decoder_batches_return_queue,))
         processes.append(blip_vqa_text_decoder_task_process)
         blip_vqa_text_decoder_task_process.start()
 
-        if fix_batch != False:
+        if fix_batch is not None:
             blip_vqa_visual_encoder_batch_size,blip_vqa_text_encoder_batch_size,blip_vqa_text_decoder_batch_size=fix_batch
             print(f"fix batch sizes: {blip_vqa_visual_encoder_batch_size},{blip_vqa_text_encoder_batch_size},{blip_vqa_text_decoder_batch_size}")
         
         while True:
-            if fix_batch==False:
+            if fix_batch is None:
                 try:
                     batch_sizes=batch_size_queue.get(block=False)
                     blip_vqa_visual_encoder_batch_size,blip_vqa_text_encoder_batch_size,blip_vqa_text_decoder_batch_size=batch_sizes
@@ -299,6 +331,7 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
                 images=np.concatenate(images, axis=0)
                 texts=np.concatenate(texts, axis=0)
                 livings=np.concatenate(livings, axis=0)
+                # (xxx,)
 
                 blip_vqa_visual_encoder_batches_queue.put((images,blip_vqa_visual_encoder_batch_size,livings),block=False)            
 
@@ -320,6 +353,7 @@ def blip_vqa_process(request_queue,request_events,processed_results,batch_size_q
                     blip_vqa_text_decoder_batches_return=blip_vqa_text_decoder_batches_return_queue.get()
                     if now_left is None:
                         now_left=blip_vqa_text_decoder_batches_return
+                        # (xxx,)
                     else:
                         now_left=np.concatenate([now_left,blip_vqa_text_decoder_batches_return],axis=0)
                     while batch_count<len(batch_nums) and now_left.shape[0]>=batch_nums[batch_count]:

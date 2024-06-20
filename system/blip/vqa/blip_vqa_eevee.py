@@ -7,8 +7,12 @@ import random
 import multiprocessing
 import sys
 import os
-from blip_vqa_process import blip_vqa_process
-from utils import change_batch_size
+
+root_path="/dynamic_batch/ee/"
+
+sys.path.append(root_path)
+from system.blip.vqa.blip_vqa_process import blip_vqa_process
+from system.utils import change_batch_size
 
 def send_and_receive(request_queue,request_events,processed_results):
     try:
@@ -16,36 +20,38 @@ def send_and_receive(request_queue,request_events,processed_results):
         # if(os.path.isfile(write_file)):    
         #     os.remove(write_file)
 
-        dataset_dir = "/workspace/datasets/vqa/"
-        json_file = "/workspace/datasets/vqa/vqa_test.json"
+        dataset_dir = root_path+"datasets/vqa/"
+        json_file = dataset_dir+"vqa_test.json"
+
         with open(json_file) as f:
             dataset = json.load(f)
-        batch_size=1
+
+        request_batch_size=1
         
-        for request_num in [2,4,8,16,32,64,128]:
+        for request_num in [2,4,8,16,32,64]:
             print(f"\nrequest_num: {request_num}")
+
             for repeat_time in range(3):
 
-                datas_list=[dataset[i*batch_size:(i+1)*batch_size] for i in range(request_num)]
-                images_batches = [np.array([bytes(os.path.join(dataset_dir, data["image"]), "utf-8") for data in datas]) for datas in datas_list]
-                texts_batches = [np.array([bytes(os.path.join(dataset_dir, data["question"]), "utf-8") for data in datas]) for datas in datas_list]
-                livings_batches = [np.array([1000 for data in datas]) for datas in datas_list]
+                request_list=[dataset[i*request_batch_size:(i+1)*request_batch_size] for i in range(request_num)]
+                # [[{},],]
 
-                request_ids, batch_nums,images,texts,livings=[],[],[],[],[]
+                images_batches = [np.array([bytes(os.path.join(dataset_dir, data["image"]), "utf-8") for data in datas]) for datas in request_list]
+                texts_batches = [np.array([bytes(os.path.join(dataset_dir, data["question"]), "utf-8") for data in datas]) for datas in request_list]
+                livings_batches = [np.array([-1 for data in datas]) for datas in request_list]
+                # [(request_batch_size,),]
+
+                request_ids, batch_nums=[],[]
                 for i in range(request_num):
-                    request_id,image_batch,text_batch,living_batch=i,images_batches[i],texts_batches[i],livings_batches[i]
-                    request_ids.append(request_id)
-                    images.append(image_batch)
-                    texts.append(text_batch)
-                    livings.append(living_batch)
-                    batch_nums.append(image_batch.shape[0])        
+                    request_ids.append(i)
+                    batch_nums.append(images_batches[i].shape[0])        
 
                 # with open(write_file,"a") as f:
                 #     f.write(f"request_num: {request_num}\n")
                 #     f.write(str(batch_size_list)+"\n")
                 
                 start_time=time.time()
-                request_queue.put((request_ids,batch_nums,images,texts,livings))
+                request_queue.put((request_ids,batch_nums,images_batches,texts_batches,livings_batches))
 
                 results=[]
                 end_times=[]
@@ -72,20 +78,24 @@ def send_and_receive(request_queue,request_events,processed_results):
                 # with open(write_file,"a") as f:
                 #     for i in results:
                 #         f.write(str(i)+"\n")
-        print("--------------------------------------------------------------------------")
+        print("send_and_receive finish..................................................")
     except KeyboardInterrupt:
         pass
 
 if __name__ == "__main__":
     try:
+        multiprocessing.set_start_method('spawn')
+        #to do?
+        #To use CUDA with multiprocessing, you must use the 'spawn' start method
+
+        fix_batch=None
         if len(sys.argv) > 1:
-            fix_batch = (int(x) for x in sys.argv[1].split(','))
+            fix_batch = [int(x) for x in sys.argv[1].split(',')]
 
         # Create a list to hold process objects
         processes = []
 
         batch_size_queue=multiprocessing.Queue()
-        # queue is not the fastest way, maybe pipe
         time_interval=1
         change_batch_size_process = multiprocessing.Process(target=change_batch_size, args=(batch_size_queue,time_interval,3))
         processes.append(change_batch_size_process)
@@ -109,4 +119,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         for process in processes:
             process.join()
-        print("finish...")
+        print("finish................................")
