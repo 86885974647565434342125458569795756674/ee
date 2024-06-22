@@ -76,7 +76,7 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
         #print(images[0].shape,images.shape)
         #torch.Size([3, 480, 480]) torch.Size([1, 3, 480, 480])
         images_embeds = self.visual_encoder(images)
-        images_embeds = images_embeds.numpy(force=True)#to(cpu)
+    #    images_embeds = images_embeds.numpy(force=True)#to(cpu)
         #print(images_embeds.shape)
         
         if print_time: 

@@ -1,47 +1,39 @@
 import torch
 import torch.multiprocessing as mp
 import time
-
-def sender(queue,pp):
-    # 创建一个tensor对象
-    tensor_data = torch.zeros((64,1024,1024),dtype=torch.float32).to("cuda")
-    # 发送tensor到队列
-    queue.put(tensor_data)
-
-    tensor_data = torch.zeros((32,1024,1024),dtype=torch.float32).to("cuda")
-    pp.recv()
-    print(time.time())
-    queue.put(tensor_data)
-    pp.recv()
-
-def receiver(queue,cp):
-    # 从队列中获取数据
-    received_data = queue.get()
-    cp.send(1)
-    received_data = queue.get()
-    print(f"{time.time()} {received_data.shape} {received_data.device}")
-    cp.send(1)
-
+import numpy as np
 def psender(queue,pp,bs):
     # 创建一个tensor对象
     tensor_data = torch.zeros((64,1024,1024),dtype=torch.float32).to("cuda")
+    #tensor_data = np.zeros((64,1024,1024),dtype=np.float32)
     # 发送tensor到队列
-    pp.send(tensor_data)
+    #pp.send(tensor_data)
+    queue.put(tensor_data)
 
     tensor_data = torch.zeros((bs,1024,1024),dtype=torch.float32).to("cuda")
+    tensor_data_ = torch.zeros((bs,1024,1024),dtype=torch.float32).to("cuda")
+    '''
+    tensor_data = np.zeros((bs,1024,1024),dtype=np.float32)
+    tensor_data_ = np.zeros((bs,1024,1024),dtype=np.float32)
+    '''
     pp.recv()
     print(time.perf_counter())
-    pp.send(tensor_data)
+    #pp.send((tensor_data,tensor_data_))
+    queue.put([tensor_data,tensor_data_])
     pp.recv()
     #print(tensor_data[0][0][2])
     #print("send exit")
 
 def preceiver(queue,cp):
     # 从队列中获取数据
-    received_data = cp.recv()
+    #received_data = cp.recv()
+    received_data=queue.get()
     cp.send(1)
-    received_data = cp.recv().clone()# it is share without clone
-    print(f"{time.perf_counter()} {received_data.shape} {received_data.device}")
+    #received_data = cp.recv()#.clone()# it is share without clone
+    received_data=queue.get()
+    received_data[0],received_data[1]=received_data[0].clone(),received_data[1].clone()
+    #print(f"{time.perf_counter()} {received_data[1].shape} {received_data[0].device}")
+    print(f"{time.perf_counter()} {received_data[1].shape} ")
     #received_data[0][0][2]=4
     cp.send(1)
 
@@ -72,3 +64,15 @@ if __name__ == '__main__':
         
         sender_process.join()
         receiver_process.join()
+    '''
+    numpy
+
+    7026087.162516628
+    7026087.387300556 (4, 1024, 1024)
+    7026088.645324079
+    7026088.989760245 (8, 1024, 1024)
+    7026090.208292822
+    7026090.873023893 (16, 1024, 1024)
+    7026092.142630592
+    7026093.350697263 (32, 1024, 1024)
+    '''

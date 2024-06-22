@@ -50,8 +50,8 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             end=torch.cuda.Event(enable_timing=True)
             start.record()
 
-        images_embeds = torch.from_numpy(images_embeds).to(self.device)
-        images_atts = torch.ones(images_embeds.size()[:-1], dtype=torch.long).to(self.device)
+#        images_embeds = torch.from_numpy(images_embeds).to(self.device)
+        images_atts = torch.ones(images_embeds.shape[:-1], dtype=torch.long).to(self.device)
         questions = self.tokenizer(
             [question.decode("utf-8") for question in questions],
             padding="longest",
@@ -78,11 +78,10 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             return_dict=True,
         )
         num_beams = 1
-        questions_states = (
-            questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
-            .numpy(force=True)
-            .reshape(batch_size, num_beams, -1, 768)
-        )
+        questions_states = 
+            questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0).reshape(batch_size, num_beams, -1, 768)
+            #.numpy(force=True)
+        
 
         if print_time:
             end.record()
