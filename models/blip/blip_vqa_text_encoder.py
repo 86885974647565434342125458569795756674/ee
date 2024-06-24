@@ -8,7 +8,6 @@ from transformers import BertTokenizer
 import numpy as np
 import time
 
-print_time=False
 
 class BLIP_VQA_TEXT_ENCODER(nn.Module):
     def __init__(
@@ -38,20 +37,23 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
         self.text_encoder = BertModel(config=encoder_config, add_pooling_layer=False)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+        self.print_time=False
 
     def forward(self, images_embeds, questions):
-        batch_size = questions.size
+        batch_size = len(questions)
         #print("batch size:", batch_size)
 
         # Text Encoder
         
-        if print_time:
+        if self.print_time:
+            '''
             start = torch.cuda.Event(enable_timing=True)
             end=torch.cuda.Event(enable_timing=True)
             start.record()
+            '''
+            start= time.perf_counter()
 
-#        images_embeds = torch.from_numpy(images_embeds).to(self.device)
-        images_atts = torch.ones(images_embeds.shape[:-1], dtype=torch.long).to(self.device)
         questions = self.tokenizer(
             [question.decode("utf-8") for question in questions],
             padding="longest",
@@ -60,14 +62,20 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             return_tensors="pt",
         ).to(self.device)
 
-        if print_time:
+        if self.print_time:
+            '''
             end.record()
             torch.cuda.synchronize()
             print("text_preprocess time:", start.elapsed_time(end)/1000)
-
+            '''
+            print("text_preprocess time:",  time.perf_counter()-start)
+            
             start = torch.cuda.Event(enable_timing=True)
             end=torch.cuda.Event(enable_timing=True)
             start.record()
+
+#        images_embeds = torch.from_numpy(images_embeds).to(self.device)
+        images_atts = torch.ones(images_embeds.shape[:-1], dtype=torch.long).to(self.device)
 
         questions.input_ids[:, 0] = self.tokenizer.enc_token_id
         questions_output = self.text_encoder(
@@ -82,7 +90,7 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             #.numpy(force=True)
         
 
-        if print_time:
+        if self.print_time:
             end.record()
             torch.cuda.synchronize()
             print("text_encoder time:", start.elapsed_time(end)/1000)

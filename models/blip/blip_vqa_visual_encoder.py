@@ -10,7 +10,6 @@ from transformers import BertTokenizer
 import numpy as np
 import time
 
-print_time=False
 
 class BLIP_VQA_VISUAL_ENCODER(nn.Module):
     def __init__(
@@ -34,12 +33,10 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
             vit, image_size, vit_grad_ckpt, vit_ckpt_layer, drop_path_rate=0.1
         )
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    def forward(self, image_urls):
-        #print("batch size:", image_urls.shape)
-
-        # Visual Encoder
-        transform = transforms.Compose([
+        
+        self.print_time=False
+        
+        self.transform = transforms.Compose([
             transforms.Resize(
                 (self.image_size, self.image_size),interpolation=InterpolationMode.BICUBIC,
             ),
@@ -50,9 +47,19 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
             ),
         ])
 
+    def forward(self, image_urls):
+        #print("batch size:", image_urls.shape)
+
+        # Visual Encoder
+
         #print(image_urls)
-        if print_time:
-            start=time.time()
+        if self.print_time:
+            '''
+            start = torch.cuda.Event(enable_timing=True)
+            end=torch.cuda.Event(enable_timing=True)
+            start.record()
+            '''
+            start=time.perf_counter()
 
 #        print(image_urls)
  #       print(type(image_urls))
@@ -60,17 +67,35 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
 #        images=[Image.open(image_url[0].decode()).convert("RGB") for image_url in image_urls]
         images=[Image.open(image_url.decode()).convert("RGB") for image_url in image_urls]
         
-        if print_time:
-            print(f"open:{time.time()-start}")
-            start=time.time()
-        
-        images = [transform(image) for image in images]
-        
-        if print_time:
-            print(f"image preprocess:{time.time()-start}")
+        if self.print_time:
+            '''
+            end.record()
+            torch.cuda.synchronize()
+            print(f"open:{start.elapsed_time(end)/1000}")
+            '''
+            print(f"open:{time.perf_counter()-start}")
+            '''
             start = torch.cuda.Event(enable_timing=True)
             end=torch.cuda.Event(enable_timing=True)
             start.record()
+            '''
+            start=time.perf_counter()
+
+        images = [self.transform(image) for image in images]
+        
+        if self.print_time:
+            '''
+            end.record()
+            torch.cuda.synchronize()
+            print(f"image preprocess:{start.elapsed_time(end)/1000}")
+            '''
+            print(f"image preprocess:{time.perf_counter()-start}")
+             
+            start = torch.cuda.Event(enable_timing=True)
+            end=torch.cuda.Event(enable_timing=True)
+            start.record()
+            
+            #start=time.perf_counter()
 
         images = torch.stack(images).to(self.device)
         #print(images[0].shape,images.shape)
@@ -79,10 +104,14 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
     #    images_embeds = images_embeds.numpy(force=True)#to(cpu)
         #print(images_embeds.shape)
         
-        if print_time: 
+        if self.print_time: 
+            
             end.record()
             torch.cuda.synchronize()
             print("visual_encoder time:", start.elapsed_time(end)/1000)
+        
+            #torch.cuda.synchronize()
+           # print(f"visual_encoder time:{time.perf_counter()-start}")
 
         return images_embeds
 

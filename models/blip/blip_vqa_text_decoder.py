@@ -8,7 +8,6 @@ from transformers import BertTokenizer
 import numpy as np
 import time
 
-print_time=False
 
 class BLIP_VQA_TEXT_DECODER(nn.Module):
     def __init__(
@@ -36,24 +35,30 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
         self.text_decoder = BertLMHeadModel(config=decoder_config)
     
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        self.print_time=False
 
     def forward(self, questions_states,questions_atts):
         batch_size = questions_states.shape[0]
         #print("batch size:", batch_size)
 
         # Decoder
-        if print_time:
+        if self.print_time:
             start = torch.cuda.Event(enable_timing=True)
             end=torch.cuda.Event(enable_timing=True)
             start.record()
 
         num_beams = 1
 
+        '''
         questions_states = torch.from_numpy(
             questions_states.reshape(batch_size * num_beams, -1, 768)
         ).to(self.device)
-
-        questions_atts = torch.from_numpy(questions_atts).to(self.device)
+        '''
+        questions_states = questions_states.reshape(batch_size * num_beams, -1, 768).to(self.device)
+        
+        #questions_atts = torch.from_numpy(questions_atts).to(self.device)
+        questions_atts = questions_atts.to(self.device)
 
         model_kwargs = {
             "encoder_hidden_states": questions_states,
@@ -78,12 +83,13 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
             self.tokenizer.decode(output, skip_special_tokens=True).encode()
             for output in outputs
         ]
-        if print_time:
+        if self.print_time:
             end.record()
             torch.cuda.synchronize()
             print("text_decoder time:",  start.elapsed_time(end)/1000)
 
-        return np.array(answers)
+        #return np.array(answers)
+        return answers
 
 
 def blip_vqa_text_decoder(pretrained="", **kwargs):

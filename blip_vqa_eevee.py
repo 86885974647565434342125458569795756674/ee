@@ -28,7 +28,7 @@ class blip_vqa_request:
         self.text=text
         # todo general content
 
-        self.start_time=time.time()
+        self.start_time=time.perf_counter()
 
         self.priority=priority
         # 0
@@ -39,8 +39,7 @@ class blip_vqa_request:
     def set_time(self,time):
         self.start_time=time
 
-# def generate_input(input_queue,start_time_queue,wait_ready):
-def generate_input(input_queue,start_time_queue):
+def generate_input(input_queue,start_time_queue,wait_ready):
     try:
         time_slot=1
 
@@ -74,20 +73,20 @@ def generate_input(input_queue,start_time_queue):
             request_togethers.append(tmp)
 
         # wait model warm up
-        # wait_time=wait_ready.get(block=True)
-        # for _ in range(wait_time):
-        #     wait_ready.get(block=True)
-        # print(f"ready to send input.................................")
+        wait_time=wait_ready.get(block=True)
+        for _ in range(wait_time):
+            wait_ready.get(block=True)
+        print(f"ready to send input.................................")
 
-        # start_time_queue.put(sum(request_num_list),block=True)
+        start_time_queue.put(sum(request_num_list),block=True)
         for rs in request_togethers:
             start_time_dict={}
             for r in rs:
-                start_time=time.time()
+                start_time=time.perf_counter()
                 r.set_time(start_time)
                 start_time_dict[r.id]=start_time
             input_queue.put(rs,block=False)
-            # start_time_queue.put(start_time_dict,block=False)
+            start_time_queue.put(start_time_dict,block=False)
             time.sleep(time_slot)
         print("generate_input finish....................................")
     except KeyboardInterrupt:
@@ -95,30 +94,30 @@ def generate_input(input_queue,start_time_queue):
         
 def record_output(out_queue,start_time_queue,bs_time,v_time):
     try:
-        # request_num=start_time_queue.get(block=True)
+        request_num=start_time_queue.get(block=True)
 
         # # start_time
-        # start_time_dict={}
-        # while len(start_time_dict)<request_num:
-        #     start_time_dict.update(start_time_queue.get(block=True))
+        start_time_dict={}
+        while len(start_time_dict)<request_num:
+            start_time_dict.update(start_time_queue.get(block=True))
 
         # # bs_time
-        # bs_time_dict={}
-        # while len(bs_time_dict)<request_num:
-        #     b_t=bs_time[0].get(block=True)
-        #     ids,end_time=b_t[0],b_t[1]
-        #     bs_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
+        bs_time_dict={}
+        while len(bs_time_dict)<request_num:
+            b_t=bs_time[0].get(block=True)
+            ids,end_time=b_t[0],b_t[1]
+            bs_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
 
         # # v_time
-        # v_time_dict={}
-        # while len(v_time_dict)<request_num:
-        #     v_t=v_time.get(block=True)
-        #     ids,end_time=v_t[0],v_t[1]
-        #     v_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
+        v_time_dict={}
+        while len(v_time_dict)<request_num:
+            v_t=v_time.get(block=True)
+            ids,end_time=v_t[0],v_t[1]
+            v_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
 
-        #     for id in ids:
-        #         print([f"id={id},latency={v_time_dict[id]-start_time_dict[id]}"])
-        #     print()
+            for id in ids:
+                print(f"id={id},bs_time-start_time={bs_time_dict[id]-start_time_dict[id]},v_time-bs_time={v_time_dict[id]-bs_time_dict[id]},latency={v_time_dict[id]-start_time_dict[id]}")
+            print()
 
         print("record_output finish..................................................")
     except KeyboardInterrupt:
@@ -170,38 +169,46 @@ def bach_scheduler(cm2bs,bs2e_list,bs_policy,bs_time):
                     i=0
                     while i+bs_list[0]<=len(image_list):
                         bs2e_list[0].put([image_ids[i:i+bs_list[0]],image_list[i:i+bs_list[0]]],block=False)
-                        bs_time[0].put([image_ids[i:i+bs_list[0]],time.time()],block=False)
+                        bs_time[0].put([image_ids[i:i+bs_list[0]],time.perf_counter()],block=False)
                         i+=bs_list[0]
                     if i<len(image_list):
                         bs2e_list[0].put([image_ids[i:],image_list[i:]],block=False)
-                        bs_time[0].put([image_ids[i:],time.time()],block=False)
+                        bs_time[0].put([image_ids[i:],time.perf_counter()],block=False)
                     image_list=[]
                     image_ids=[]
     except KeyboardInterrupt:
         print("bach_scheduler exit..................................................")
 
-# def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time,wait_ready):
-def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time):
+def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time,wait_ready):
     try:
         model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
         model = blip_vqa_visual_encoder(pretrained=model_url, vit="base")
         model.eval()
         with torch.no_grad():
             # warm_up
-            # fake_data=[root_path.encode('utf-8')+b"/demos/images/merlion.png"]*32
-            # model(fake_data)
-            # torch.cuda.synchronize()
-            # wait_ready.put(0,block=False)
+            fake_data=[root_path.encode('utf-8')+b"/demos/images/merlion.png"]*64
+            model(fake_data)
+            torch.cuda.synchronize()
+            wait_ready.put(0,block=False)
 
             while True:    
                 ids,datas=bs2ve.get(block=True)
-                # print(f"batch size of blip_vqa_visual_encoder={len(datas)}")
+
                 datas=model(datas)
+                
                 # add cache into ids and datas
-                output_queue.put([ids,datas],block=False)  
-                v_time.put([ids,time.time()],block=False) 
+                output_queue.put([ids,datas],block=False) 
+
+                torch.cuda.synchronize()
+                v_time.put([ids,time.perf_counter()],block=False) 
+                
+                # print(f"batch size of blip_vqa_visual_encoder={len(datas)}")
+                
     except KeyboardInterrupt:
+        output_queue.close()
+        output_queue.cancel_join_thread()
         print("blip_vqa_visual_encoder_engine exit..................................................")
+        return 
 
 if __name__ == "__main__":
     try:
@@ -211,10 +218,9 @@ if __name__ == "__main__":
 
         input_queue=multiprocessing.Queue()
         start_time_queue=multiprocessing.Queue()
-        # wait_ready=multiprocessing.Queue()
-        # wait_ready.put(1,block=False)
-        # input_process=multiprocessing.Process(target=generate_input, args=(input_queue,start_time_queue,wait_ready))
-        input_process=multiprocessing.Process(target=generate_input, args=(input_queue,start_time_queue))
+        wait_ready=multiprocessing.Queue()
+        wait_ready.put(1,block=False)
+        input_process=multiprocessing.Process(target=generate_input, args=(input_queue,start_time_queue,wait_ready))
         processes.append(input_process)
 
         cm2vc=multiprocessing.Queue()
@@ -240,15 +246,13 @@ if __name__ == "__main__":
         bach_scheduler_process=multiprocessing.Process(target=bach_scheduler,args=(cm2bs,bs2e_list,bs_policy,bs_time))
         processes.append(bach_scheduler_process)
 
-        # output_queue=multiprocessing.Queue()
-        # v_time=multiprocessing.Queue()
-        # # blip_vqa_visual_encoder_engine_process=multiprocessing.Process(target=blip_vqa_visual_encoder_engine,args=(vc2ve,ve2vc,None,bs2ve,output_queue,v_time,wait_ready))
-        # blip_vqa_visual_encoder_engine_process=multiprocessing.Process(target=blip_vqa_visual_encoder_engine,args=(vc2ve,ve2vc,None,bs2ve,output_queue,v_time,))
-        # processes.append(blip_vqa_visual_encoder_engine_process)
-        # block here???????????????????????????
+        output_queue=multiprocessing.Queue()
+        v_time=multiprocessing.Queue()
+        blip_vqa_visual_encoder_engine_process=multiprocessing.Process(target=blip_vqa_visual_encoder_engine,args=(vc2ve,ve2vc,None,bs2ve,output_queue,v_time,wait_ready))
+        processes.append(blip_vqa_visual_encoder_engine_process)
         
-        # output_process=multiprocessing.Process(target=record_output,args=(output_queue,start_time_queue,bs_time,v_time))
-        # processes.append(output_process)
+        output_process=multiprocessing.Process(target=record_output,args=(output_queue,start_time_queue,bs_time,v_time))
+        processes.append(output_process)
 
         for p in processes:
             p.start()

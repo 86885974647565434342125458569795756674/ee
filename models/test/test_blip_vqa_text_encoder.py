@@ -12,16 +12,14 @@ from models.blip.blip_vqa_text_encoder import blip_vqa_text_encoder
 
 bs=1
 if len(sys.argv) > 1:
-        bs = int(sys.argv[1])
-        print(f"bs={bs}")
+    bs = int(sys.argv[1])
+print(f"bs={bs}")
 
-images_embeds = np.load(root_path+"pretrained/images_embeds.npy")
-images_embeds = np.repeat(images_embeds,bs,axis=0)
+images_embeds = torch.load(root_path+"pretrained/images_embeds.pth")
+images_embeds=images_embeds.repeat(images_embeds.shape[0]*64,*tuple([1]*len(images_embeds.shape[1:])))
 
-questions = np.array(
-    [[b"where is the woman sitting?"]]
-)
-questions = np.repeat(questions,bs,axis=0)
+questions = [b"where is the woman sitting?"]*64
+
 # questions = np.full((batch_size,), b"where is the woman sitting?")
 #print(questions)
 #print(questions.size)
@@ -31,7 +29,7 @@ model = blip_vqa_text_encoder(pretrained=model_url, vit="base")
 
 
 model.eval()
-
+model.print_time=False
 with torch.no_grad():
      questions_states = model(images_embeds, questions)
 #print(questions_states.shape,questions_states.dtype)
@@ -39,13 +37,31 @@ with torch.no_grad():
 #with open(root_path+"/pretrained/questions_states.npy", "wb") as f:
  #    np.save(f, questions_states)
 
-#start_time=time.time()
+images_embeds = torch.load(root_path+"pretrained/images_embeds.pth")
+images_embeds=images_embeds.repeat(images_embeds.shape[0]*bs,*tuple([1]*len(images_embeds.shape[1:])))
+
+questions = [b"where is the woman sitting?"]*bs
+
+#model.print_time=True
+model.print_time=False
 with torch.no_grad():
-     questions_states = model(images_embeds, questions)
-print(questions_states.shape,questions_states.dtype)
-#end_time=time.time()
-#print(f"time={end_time-start_time}")
+    if not model.print_time:
+        '''
+        start=torch.cuda.Event(enable_timing=True)
+        end=torch.cuda.Event(enable_timing=True)
+        start.record()
+        '''
+        start= time.perf_counter()
+    questions_states = model(images_embeds, questions)
+    if not model.print_time:
+        '''
+        end.record()
+        torch.cuda.synchronize()
+        print(f"time={start.elapsed_time(end)/1000}")
+        '''
+        torch.cuda.synchronize()
+        print(f"time={ time.perf_counter()-start}")
 
 #with open(root_path+"/blip_vqa_text_encoder_time.txt","a") as f:
  #       f.write(f"{bs},{end_time-start_time}\n")
-
+#torch.save(questions_states[:1],root_path+'pretrained/questions_states.pth')
