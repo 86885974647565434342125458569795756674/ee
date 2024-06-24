@@ -38,7 +38,41 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-        self.print_time=False
+    def forward_time(self, images_embeds, questions):
+
+        start= time.perf_counter()
+        batch_size = len(questions)
+        questions = self.tokenizer(
+            [question.decode("utf-8") for question in questions],
+            padding="longest",
+            truncation=True,
+            max_length=35,
+            return_tensors="pt",
+        )   
+        print("text_preprocess time:",  time.perf_counter()-start)
+        
+        start = torch.cuda.Event(enable_timing=True)
+        end=torch.cuda.Event(enable_timing=True)
+        start.record()
+        questions.to(self.device)
+        images_atts = torch.ones(images_embeds.shape[:-1], dtype=torch.long).to(self.device)
+
+        questions.input_ids[:, 0] = self.tokenizer.enc_token_id
+        questions_output = self.text_encoder(
+            questions.input_ids,
+            attention_mask=questions.attention_mask,
+            encoder_hidden_states=images_embeds,
+            encoder_attention_mask=images_atts,
+            return_dict=True,
+        )
+        num_beams = 1
+        questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0).reshape(batch_size, num_beams, -1, 768)
+
+        end.record()
+        torch.cuda.synchronize()
+        print("text_encoder time:", start.elapsed_time(end)/1000)
+
+        return questions_states
 
     def forward(self, images_embeds, questions):
         batch_size = len(questions)
@@ -46,14 +80,6 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
 
         # Text Encoder
         
-        if self.print_time:
-            '''
-            start = torch.cuda.Event(enable_timing=True)
-            end=torch.cuda.Event(enable_timing=True)
-            start.record()
-            '''
-            start= time.perf_counter()
-
         questions = self.tokenizer(
             [question.decode("utf-8") for question in questions],
             padding="longest",
@@ -61,18 +87,6 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             max_length=35,
             return_tensors="pt",
         ).to(self.device)
-
-        if self.print_time:
-            '''
-            end.record()
-            torch.cuda.synchronize()
-            print("text_preprocess time:", start.elapsed_time(end)/1000)
-            '''
-            print("text_preprocess time:",  time.perf_counter()-start)
-            
-            start = torch.cuda.Event(enable_timing=True)
-            end=torch.cuda.Event(enable_timing=True)
-            start.record()
 
 #        images_embeds = torch.from_numpy(images_embeds).to(self.device)
         images_atts = torch.ones(images_embeds.shape[:-1], dtype=torch.long).to(self.device)
@@ -88,12 +102,6 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
         num_beams = 1
         questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0).reshape(batch_size, num_beams, -1, 768)
             #.numpy(force=True)
-        
-
-        if self.print_time:
-            end.record()
-            torch.cuda.synchronize()
-            print("text_encoder time:", start.elapsed_time(end)/1000)
 
         return questions_states
 

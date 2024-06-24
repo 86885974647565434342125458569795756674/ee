@@ -36,17 +36,50 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
     
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        self.print_time=False
+    def forward_time(self, questions_states,questions_atts):
+
+        start = torch.cuda.Event(enable_timing=True)
+        end=torch.cuda.Event(enable_timing=True)
+        start.record()
+
+        batch_size = questions_states.shape[0]
+        num_beams = 1
+        questions_states = questions_states.reshape(batch_size * num_beams, -1, 768).to(self.device)
+        
+        questions_atts = questions_atts.to(self.device)
+
+        model_kwargs = {
+            "encoder_hidden_states": questions_states,
+            "encoder_attention_mask": questions_atts,
+        }
+        bos_ids = torch.full(
+            (batch_size, 1),
+            fill_value=self.tokenizer.bos_token_id,
+            device=self.device,
+        )
+        outputs = self.text_decoder.generate(
+            input_ids=bos_ids,
+            max_length=10,
+            min_length=1,
+            num_beams=num_beams,
+            eos_token_id=self.tokenizer.sep_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
+            **model_kwargs
+        )
+
+        answers = [
+            self.tokenizer.decode(output, skip_special_tokens=True).encode()
+            for output in outputs
+        ]
+        end.record()
+        torch.cuda.synchronize()
+        print("text_decoder time:",  start.elapsed_time(end)/1000)
+
+        return answers
 
     def forward(self, questions_states,questions_atts):
         batch_size = questions_states.shape[0]
         #print("batch size:", batch_size)
-
-        # Decoder
-        if self.print_time:
-            start = torch.cuda.Event(enable_timing=True)
-            end=torch.cuda.Event(enable_timing=True)
-            start.record()
 
         num_beams = 1
 
@@ -83,11 +116,6 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
             self.tokenizer.decode(output, skip_special_tokens=True).encode()
             for output in outputs
         ]
-        if self.print_time:
-            end.record()
-            torch.cuda.synchronize()
-            print("text_decoder time:",  start.elapsed_time(end)/1000)
-
         #return np.array(answers)
         return answers
 

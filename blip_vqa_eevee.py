@@ -10,6 +10,7 @@ import sys
 import os
 
 root_path="/dynamic_batch/ee/"
+dataset_dir = root_path+"datasets/vqa/"
 
 sys.path.append(root_path)
 from system.blip.vqa.blip_vqa_process import blip_vqa_process
@@ -43,7 +44,6 @@ def generate_input(input_queue,start_time_queue,wait_ready):
     try:
         time_slot=1
 
-        dataset_dir = root_path+"datasets/vqa/"
         json_file = dataset_dir+"vqa_test.json"
 
         with open(json_file) as f:
@@ -101,14 +101,14 @@ def record_output(out_queue,start_time_queue,bs_time,v_time):
         while len(start_time_dict)<request_num:
             start_time_dict.update(start_time_queue.get(block=True))
 
-        # # bs_time
+        # bs_time
         bs_time_dict={}
         while len(bs_time_dict)<request_num:
             b_t=bs_time[0].get(block=True)
             ids,end_time=b_t[0],b_t[1]
             bs_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
 
-        # # v_time
+        # v_time
         v_time_dict={}
         while len(v_time_dict)<request_num:
             v_t=v_time.get(block=True)
@@ -186,7 +186,7 @@ def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time,w
         model.eval()
         with torch.no_grad():
             # warm_up
-            fake_data=[root_path.encode('utf-8')+b"/demos/images/merlion.png"]*64
+            fake_data=[dataset_dir.encode('utf-8')+b"test2015/COCO_test2015_000000262144.jpg"]*32
             model(fake_data)
             torch.cuda.synchronize()
             wait_ready.put(0,block=False)
@@ -194,6 +194,9 @@ def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time,w
             while True:    
                 ids,datas=bs2ve.get(block=True)
 
+                # datas=model.forward_time(datas)
+
+                # start_time=time.perf_counter()
                 datas=model(datas)
                 
                 # add cache into ids and datas
