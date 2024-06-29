@@ -20,7 +20,7 @@ print(f"bs={bs}")
 #questions_states = np.repeat(questions_states,bs,axis=0)
 
 model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
-model = blip_vqa_text_decoder(pretrained=model_url, vit="base")
+model = blip_vqa_text_decoder(pretrained=model_url, vit="large")
 model.eval()
 
 questions_states=torch.load(root_path+"pretrained/questions_states.pth")

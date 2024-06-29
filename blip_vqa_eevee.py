@@ -49,7 +49,7 @@ def generate_input(input_queue,start_time_queue,wait_ready):
         with open(json_file) as f:
             dataset = json.load(f)
 
-        request_num_list=[2,4,8,16,32]
+        request_num_list=[4,4,4,4]#[2,4,8,16,32]
 
         request_ids=list(range(request_num_list[0]))
         request_id_togethers=[list(range(request_num_list[0]))]
@@ -67,7 +67,8 @@ def generate_input(input_queue,start_time_queue,wait_ready):
         for id_togethers in request_id_togethers:
             tmp=[]
             for id in id_togethers:
-                image=bytes(os.path.join(dataset_dir, dataset[id]["image"]), "utf-8")
+                #image=bytes(os.path.join(dataset_dir, dataset[id]["image"]), "utf-8")
+                image=bytes(os.path.join(dataset_dir, dataset[id]["image"].replace("test2015/", "test2015/re_")), "utf-8")
                 text=bytes(dataset[id]["question"], "utf-8")
                 tmp.append(blip_vqa_request(id,image,text,0,-1))
             request_togethers.append(tmp)
@@ -115,8 +116,8 @@ def record_output(out_queue,start_time_queue,bs_time,v_time):
             ids,end_time=v_t[0],v_t[1]
             v_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
 
-            for id in ids:
-                print(f"id={id},bs_time-start_time={bs_time_dict[id]-start_time_dict[id]},v_time-bs_time={v_time_dict[id]-bs_time_dict[id]},latency={v_time_dict[id]-start_time_dict[id]}")
+            for i in ids:
+                print(f"id={i},start_time={start_time_dict[i]},end_time={v_time_dict[i]},bs_time-start_time={bs_time_dict[i]-start_time_dict[i]},v_time-bs_time={v_time_dict[i]-bs_time_dict[i]},latency={v_time_dict[i]-start_time_dict[i]}")
             print()
 
         print("record_output finish..................................................")
@@ -182,11 +183,11 @@ def bach_scheduler(cm2bs,bs2e_list,bs_policy,bs_time):
 def blip_vqa_visual_encoder_engine(c2v,v2c,pre_queue,bs2ve,output_queue,v_time,wait_ready):
     try:
         model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
-        model = blip_vqa_visual_encoder(pretrained=model_url, vit="base")
+        model = blip_vqa_visual_encoder(pretrained=model_url, vit="large")
         model.eval()
         with torch.no_grad():
             # warm_up
-            fake_data=[dataset_dir.encode('utf-8')+b"test2015/COCO_test2015_000000262144.jpg"]*32
+            fake_data=[dataset_dir.encode('utf-8')+b"test2015/re_COCO_test2015_000000262144.jpg"]*32
             model(fake_data)
             torch.cuda.synchronize()
             wait_ready.put(0,block=False)
@@ -241,7 +242,7 @@ if __name__ == "__main__":
 
         bs2ve=multiprocessing.Queue()
         bs2e_list=[bs2ve]
-        bs_policy={"kind":"fix","bses":"3,3,3"}
+        bs_policy={"kind":"fix","bses":"4,4,4"}
         # bs_policy={"kind":"random"}
         # bs_policy={"kind":"explict","bses":["2,2,2","4,4,4","8,8,8","16,16,16","32,32,32"],"time_slot":"1"}
         bs_v=multiprocessing.Queue()

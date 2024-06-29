@@ -14,7 +14,7 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
         self,
         med_config="configs/med_config.json",
         image_size=480,
-        vit="base",
+        vit="large",
         vit_grad_ckpt=False,
         vit_ckpt_layer=0,
     ):

@@ -16,7 +16,7 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
         self,
         med_config="configs/med_config.json",
         image_size=480,
-        vit="base",
+        vit="large",
         vit_grad_ckpt=False,
         vit_ckpt_layer=0,
     ):
@@ -35,9 +35,9 @@ class BLIP_VQA_VISUAL_ENCODER(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.transform = transforms.Compose([
-            transforms.Resize(
-                (self.image_size, self.image_size),interpolation=InterpolationMode.BICUBIC,
-            ),
+            #transforms.Resize(
+                #(self.image_size, self.image_size),interpolation=InterpolationMode.BICUBIC,
+            #),
             transforms.ToTensor(),
             transforms.Normalize(
                 (0.48145466, 0.4578275, 0.40821073),                            

@@ -23,14 +23,16 @@ if len(sys.argv) > 1:
 print(f"bs={bs}")
 
 model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
-model = blip_vqa_visual_encoder(pretrained=model_url, vit="base")
+model = blip_vqa_visual_encoder(pretrained=model_url, vit="large")
 model.eval()
 
 with torch.no_grad():
-    images_embeds = model([bytes(os.path.join(dataset_dir, dataset[0]["image"]), "utf-8")]*64)
+    #images_embeds = model([bytes(os.path.join(dataset_dir, dataset[0]["image"]), "utf-8")]*64)
+    images_embeds = model([bytes(os.path.join(dataset_dir, dataset[0]["image"].replace("test2015/", "test2015/re_")), "utf-8")]*64)
 torch.cuda.synchronize()
 
-images=[bytes(os.path.join(dataset_dir, dataset[0]["image"]), "utf-8")]*bs
+#images=[bytes(os.path.join(dataset_dir, dataset[0]["image"]), "utf-8")]*bs
+images=[bytes(os.path.join(dataset_dir, dataset[0]["image"].replace("test2015/", "test2015/re_")), "utf-8")]*bs
 
 with torch.no_grad():
     images_embeds = model.forward_time(images)
@@ -41,4 +43,5 @@ with torch.no_grad():
     torch.cuda.synchronize()
     print(time.perf_counter()-start)
 
-#torch.save(images_embeds[:1],root_path+'pretrained/images_embeds.pth')
+#print(model.image_size)
+torch.save(images_embeds[:1],root_path+'pretrained/images_embeds.pth')

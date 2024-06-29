@@ -16,7 +16,7 @@ if len(sys.argv) > 1:
 print(f"bs={bs}")
 
 model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
-model = blip_vqa_text_encoder(pretrained=model_url, vit="base")
+model = blip_vqa_text_encoder(pretrained=model_url, vit="large")
 model.eval()
 
 images_embeds = torch.load(root_path+"pretrained/images_embeds.pth")
