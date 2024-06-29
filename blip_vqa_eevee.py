@@ -49,7 +49,7 @@ def generate_input(input_queue,start_time_queue,wait_ready):
         with open(json_file) as f:
             dataset = json.load(f)
 
-        request_num_list=[4,4,4,4]#[2,4,8,16,32]
+        request_num_list=[4,4,4,4,4,4,4,4,4]#[2,4,8,16,32]
 
         request_ids=list(range(request_num_list[0]))
         request_id_togethers=[list(range(request_num_list[0]))]
