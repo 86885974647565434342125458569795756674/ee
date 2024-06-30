@@ -40,7 +40,7 @@ with torch.no_grad():
     start= time.perf_counter()
     questions_states = model(images_embeds, questions)
     torch.cuda.synchronize()
-    print(f"time={ time.perf_counter()-start}")
+    print(f"time: { time.perf_counter()-start}")
 
 #print(questions_states.shape)
 #torch.Size([4, 35, 768])

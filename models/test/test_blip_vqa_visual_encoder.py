@@ -41,7 +41,7 @@ with torch.no_grad():
     start=time.perf_counter()
     images_embeds = model(images)
     torch.cuda.synchronize()
-    print(time.perf_counter()-start)
+    print(f"time: {time.perf_counter()-start}")
 
 #print(model.image_size)
-torch.save(images_embeds[:1],root_path+'pretrained/images_embeds.pth')
+#torch.save(images_embeds[:1],root_path+'pretrained/images_embeds.pth')

@@ -44,5 +44,5 @@ with torch.no_grad():
     start= time.perf_counter()
     answers = model(questions_states)
     torch.cuda.synchronize()
-    print(f"time={ time.perf_counter()-start}")
-print(answers)
+    print(f"time: { time.perf_counter()-start}")
+#print(answers)
