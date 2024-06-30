@@ -50,7 +50,8 @@ def generate_input(input_queue,start_time_queue,wait_ready):
         with open(json_file) as f:
             dataset = json.load(f)
 
-        request_num_list=[4,4,4,4]#[2,4,8,16,32]
+        request_num_list=[4,4,4,4]
+        request_num_list=[2,4,8,16,32]
 
         request_ids=list(range(request_num_list[0]))
         request_id_togethers=[list(range(request_num_list[0]))]
@@ -120,13 +121,21 @@ def record_output(out_queue,start_time_queue,bs_time,e_time):
                 e_time_dict.update(dict(zip(ids,[end_time]*len(ids))))
             dict_list.append(e_time_dict)
         
+        latencies=[]
         for i in range(request_num):
-            s=f"id={i},start_time={start_time_dict[i]},end_time={dict_list[-1][i]},latency={dict_list[-1][i]-start_time_dict[i]},bs_time-start_time={bs_time_dict[i]-start_time_dict[i]}"
+            s=f"id={i},start_time={start_time_dict[i]},end_time={dict_list[-1][i]},latency={dict_list[-1][i]-start_time_dict[i]}\n"
+            for d in range(len(dict_list)):
+                s=s+f"{dict_list[d][i]},"
+            s=s+f"\nsche_time={dict_list[0][i]-start_time_dict[i]}"
+            s=s+"\n"
             for d in range(1,len(dict_list)):
-                s=s+f",{d}_e-{d-1}_e={dict_list[d][i]-dict_list[d-1][i]}"
+                s=s+f"{d}_e-{d-1}_e={dict_list[d][i]-dict_list[d-1][i]},"
             print(s)
             print()
+            latencies.append(dict_list[-1][i]-start_time_dict[i])
         
+        print(f"avg latency={sum(latencies)/len(latencies)}")
+
         print("record_output finish..................................................")
     except KeyboardInterrupt:
         print("record_output exit..................................................")
@@ -377,7 +386,8 @@ if __name__ == "__main__":
         bs_te=multiprocessing.Queue()
         bs_td=multiprocessing.Queue()
         bs_time=[bs_v,bs_te,bs_td]
-        bs_policy={"kind":"fix","bses":"4,4,4"}
+        bs_policy={"kind":"fix","bses":"4,4,4"}#0.913968265867762
+        #bs_policy={"kind":"fix","bses":"2,4,8"}#1.0067323830669686
         # bs_policy={"kind":"random"}
         # bs_policy={"kind":"explict","bses":["2,2,2","4,4,4","8,8,8","16,16,16","32,32,32"],"time_slot":"1"}
         bach_scheduler_process=multiprocessing.Process(target=bach_scheduler,args=(cm2bs,bs2e_list,bs_policy,bs_time))
