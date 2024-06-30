@@ -8,6 +8,7 @@ import torch
 import torch.multiprocessing as multiprocessing
 import sys
 import os
+import torch.nn.functional as F
 
 root_path="/dynamic_batch/ee/"
 dataset_dir = root_path+"datasets/vqa/"
@@ -124,6 +125,7 @@ def record_output(out_queue,start_time_queue,bs_time,e_time):
             for d in range(1,len(dict_list)):
                 s=s+f",{d}_e-{d-1}_e={dict_list[d][i]-dict_list[d-1][i]}"
             print(s)
+            print()
         
         print("record_output finish..................................................")
     except KeyboardInterrupt:
@@ -252,7 +254,7 @@ def get_pre_data(now_left,len2send):
             data2send.append(now_left[0])
             now_left=now_left[1:]
         i+=len(data2send[-1])
-    return torch.cat(data2send,dim=0)
+    return data2send
     
 def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait_ready):
     try:
@@ -277,7 +279,7 @@ def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
                     now_left.append(pre_queue.get(block=True)[1])
                     lbs+=len(now_left[-1])
 
-                images_embeds=get_pre_data(now_left,len(questions))
+                images_embeds=torch.cat(get_pre_data(now_left,len(questions)),dim=0)
                 lbs-=len(questions)
 
                 # start_time=time.perf_counter()
@@ -297,21 +299,26 @@ def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
         print("blip_vqa_text_encoder_engine exit..................................................")
         return 
 
+# Function to pad tensor on the left side
+def pad_tensor(tensor, max_dim):
+    pad_size = max_dim - tensor.shape[2]
+    padded_tensor = F.pad(tensor, (0, 0, pad_size, 0))
+    mask=torch.ones(tensor.shape[0],max_dim)
+    mask[:pad_size]=0
+    return padded_tensor,mask
+    
+def pad_concate(data2send):
+    max_len=max(d.shape[2] for d in data2send)
 
-def pad_concate(now_left,len2send):
-    input1_data1_shape=(input0_data1.shape[0]*input0_data1.shape[1],input0_data1.shape[2])
-    input1_data1 = torch.ones(input1_data1_shape, dtype=torch.long).numpy(force=True)
+    mask_list=[]
+    for i in range(len(data2send)):
+        data2send[i],mask=pad_tensor(data2send[i],max_len)
+        mask_list.append(mask)
 
-    if input0_data.shape[2]>input0_data1.shape[2]:
-        input1_data1=np.pad(input1_data1,((0,0),(input0_data.shape[2]-input0_data1.shape[2],0)),"constant", constant_values=(0, 0))
-        input0_data1=np.pad(input0_data1,((0,0),(0,0),(input0_data.shape[2]-input0_data1.shape[2],0),(0,0)),"constant")
-    elif input0_data.shape[2]<input0_data1.shape[2]:
-        input1_data=np.pad(input1_data,((0,0),(input0_data1.shape[2]-input0_data.shape[2],0)),"constant", constant_values=(0, 0))
-        input0_data=np.pad(input0_data,((0,0),(0,0),(input0_data1.shape[2]-input0_data.shape[2],0),(0,0)),"constant")
+    questions_states=torch.cat(data2send,dim=0)
+    questions_atts=torch.cat(mask_list,dim=0)
 
-    input0_data=np.concatenate([input0_data,input0_data1],axis=0)
-    input1_data=np.concatenate([input1_data,input1_data1],axis=0)
-    return input0_data,input1_data
+    return questions_states,questions_atts
 
    
 def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait_ready):
@@ -334,13 +341,25 @@ def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
             lbs=0
             while True:    
                 ids,_=bs2e.get(block=True)
-            
+                
                 while lbs<len(ids):
                     now_left.append(pre_queue.get(block=True)[1])
                     lbs+=len(now_left[-1])
 
-                questions_states,questions_atts=pad_concate(now_left,len(ids))
+                start=time.perf_counter()
+
+                data2send=get_pre_data(now_left,len(ids))
+
+                end=time.perf_counter()
+                print(f"get_pre_data:{end-start}")
+                start=end
+
+                questions_states,questions_atts=pad_concate(data2send)
                 lbs-=len(ids)
+
+                end=time.perf_counter()
+                print(f"pad_concate:{end-start}")
+                start=end
 
                 # start_time=time.perf_counter()
                 datas=model(questions_states, questions_atts)
@@ -349,8 +368,13 @@ def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
                 output_queue.put([ids,datas],block=False) 
 
                 torch.cuda.synchronize()
+
                 e_time.put([ids,time.perf_counter()],block=False) 
                 
+                end=time.perf_counter()
+                print(f"model:{end-start},{questions_states.shape}")
+                start=end
+
                 # print(f"batch size of blip_vqa_visual_encoder={len(datas)}")
                 
     except KeyboardInterrupt:
@@ -388,10 +412,12 @@ if __name__ == "__main__":
 
         bs2ve=multiprocessing.Queue()
         bs2tee=multiprocessing.Queue()
-        bs2e_list=[bs2ve,bs2tee]
+        bs2tde=multiprocessing.Queue()
+        bs2e_list=[bs2ve,bs2tee,bs2tde]
         bs_v=multiprocessing.Queue()
         bs_te=multiprocessing.Queue()
-        bs_time=[bs_v,bs_te]
+        bs_td=multiprocessing.Queue()
+        bs_time=[bs_v,bs_te,bs_td]
         bs_policy={"kind":"fix","bses":"4,4,4"}
         # bs_policy={"kind":"random"}
         # bs_policy={"kind":"explict","bses":["2,2,2","4,4,4","8,8,8","16,16,16","32,32,32"],"time_slot":"1"}
@@ -411,8 +437,9 @@ if __name__ == "__main__":
 
         output_queue=multiprocessing.Queue()
         td_time=multiprocessing.Queue()
-        blip_vqa_text_decoder_engine_process=multiprocessing.Process(target=blip_vqa_text_decoder_engine,args=(None,None,te2td,bs2tee,output_queue,td_time,wait_ready))
+        blip_vqa_text_decoder_engine_process=multiprocessing.Process(target=blip_vqa_text_decoder_engine,args=(None,None,te2td,bs2tde,output_queue,td_time,wait_ready))
         processes.append(blip_vqa_text_decoder_engine_process)
+
 
         e_time=[v_time,te_time,td_time]
         output_process=multiprocessing.Process(target=record_output,args=(output_queue,start_time_queue,bs_time,e_time))

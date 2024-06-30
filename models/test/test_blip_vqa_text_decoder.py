@@ -26,10 +26,8 @@ model.eval()
 questions_states=torch.load(root_path+"pretrained/questions_states.pth")
 questions_states=questions_states.repeat(questions_states.shape[0]*64,*tuple([1]*len(questions_states.shape[1:])))
 
-questions_atts_shape=(questions_states.shape[0]*questions_states.shape[1],questions_states.shape[2])
-questions_atts = torch.ones(questions_atts_shape, dtype=torch.long)
 with torch.no_grad():
-    answers = model(questions_states,questions_atts)
+    answers = model(questions_states)
 torch.cuda.synchronize()
 
 #print(sum(p.numel() for p in model.parameters()))
@@ -37,20 +35,14 @@ torch.cuda.synchronize()
 questions_states=torch.load(root_path+"pretrained/questions_states.pth")
 questions_states=questions_states.repeat(questions_states.shape[0]*bs,*tuple([1]*len(questions_states.shape[1:])))
 
-questions_atts_shape=(questions_states.shape[0]*questions_states.shape[1],questions_states.shape[2])
-questions_atts = torch.ones(questions_atts_shape, dtype=torch.long)
 with torch.no_grad():
-    answers = model.forward_time(questions_states,questions_atts)
+    answers = model.forward_time(questions_states)
     #answers = model(questions_states)
 #print(answers)
 
-
 with torch.no_grad():
     start= time.perf_counter()
-    answers = model(questions_states,questions_atts)
+    answers = model(questions_states)
     torch.cuda.synchronize()
     print(f"time={ time.perf_counter()-start}")
-#print(answers)
-#[b'on bench']
-#with open(root_path+"/blip_vqa_text_decoder_time.txt","a") as f:
- #       f.write(f"{bs},{end_time-start_time}\n")
+print(answers)

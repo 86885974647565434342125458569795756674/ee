@@ -42,6 +42,6 @@ with torch.no_grad():
     torch.cuda.synchronize()
     print(f"time={ time.perf_counter()-start}")
 
-#with open(root_path+"/blip_vqa_text_encoder_time.txt","a") as f:
- #       f.write(f"{bs},{end_time-start_time}\n")
-#torch.save(questions_states[:1],root_path+'pretrained/questions_states.pth')
+#print(questions_states.shape)
+#torch.Size([4, 35, 768])
+torch.save(questions_states[:1],root_path+'pretrained/questions_states.pth')

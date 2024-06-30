@@ -35,18 +35,18 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
         self.text_decoder = BertLMHeadModel(config=decoder_config)
     
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.gen_len=9
         
-    def forward_time(self, questions_states,questions_atts):
+    def forward_time(self, questions_states):
 
         start = torch.cuda.Event(enable_timing=True)
         end=torch.cuda.Event(enable_timing=True)
         start.record()
 
         batch_size = questions_states.shape[0]
-        num_beams = 1
-        questions_states = questions_states.reshape(batch_size * num_beams, -1, 768).to(self.device)
+        questions_states = questions_states.to(self.device)
         
-        questions_atts = questions_atts.to(self.device)
+        questions_atts = torch.ones(questions_states.size()[:-1],dtype=torch.long).to(self.device)
 
         model_kwargs = {
             "encoder_hidden_states": questions_states,
@@ -57,16 +57,19 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
             fill_value=self.tokenizer.bos_token_id,
             device=self.device,
         )
+        num_beams = 1
         outputs = self.text_decoder.generate(
             input_ids=bos_ids,
-            max_length=10,
-            min_length=1,
+            max_new_tokens=self.gen_len,
+            min_new_tokens=self.gen_len,
             num_beams=num_beams,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             **model_kwargs
         )
 
+        #print(outputs.shape)
+        #[bs,gen_len+1]
         answers = [
             self.tokenizer.decode(output, skip_special_tokens=True).encode()
             for output in outputs
@@ -77,21 +80,11 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
 
         return answers
 
-    def forward(self, questions_states,questions_atts):
+    def forward(self, questions_states):
         batch_size = questions_states.shape[0]
-        #print("batch size:", batch_size)
-
-        num_beams = 1
-
-        '''
-        questions_states = torch.from_numpy(
-            questions_states.reshape(batch_size * num_beams, -1, 768)
-        ).to(self.device)
-        '''
-        questions_states = questions_states.reshape(batch_size * num_beams, -1, 768).to(self.device)
+        questions_states = questions_states.to(self.device)
         
-        #questions_atts = torch.from_numpy(questions_atts).to(self.device)
-        questions_atts = questions_atts.to(self.device)
+        questions_atts = torch.ones(questions_states.size()[:-1],dtype=torch.long).to(self.device)
 
         model_kwargs = {
             "encoder_hidden_states": questions_states,
@@ -102,10 +95,11 @@ class BLIP_VQA_TEXT_DECODER(nn.Module):
             fill_value=self.tokenizer.bos_token_id,
             device=self.device,
         )
+        num_beams = 1
         outputs = self.text_decoder.generate(
             input_ids=bos_ids,
-            max_length=10,
-            min_length=1,
+            max_new_tokens=self.gen_len,
+            min_new_tokens=self.gen_len,
             num_beams=num_beams,
             eos_token_id=self.tokenizer.sep_token_id,
             pad_token_id=self.tokenizer.pad_token_id,

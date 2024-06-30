@@ -44,11 +44,12 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
         batch_size = len(questions)
         questions = self.tokenizer(
             [question.decode("utf-8") for question in questions],
-            padding="longest",
+            padding="max_length",
             truncation=True,
             max_length=35,
             return_tensors="pt",
         )   
+        #print(questions)
         print("text_preprocess time:",  time.perf_counter()-start)
         
         start = torch.cuda.Event(enable_timing=True)
@@ -66,7 +67,7 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             return_dict=True,
         )
         num_beams = 1
-        questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0).reshape(batch_size, num_beams, -1, 768)
+        questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0)#.reshape(batch_size, num_beams, -1, 768)
 
         end.record()
         torch.cuda.synchronize()
@@ -82,7 +83,7 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
         
         questions = self.tokenizer(
             [question.decode("utf-8") for question in questions],
-            padding="longest",
+            padding="max_length",
             truncation=True,
             max_length=35,
             return_tensors="pt",
@@ -100,7 +101,7 @@ class BLIP_VQA_TEXT_ENCODER(nn.Module):
             return_dict=True,
         )
         num_beams = 1
-        questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0).reshape(batch_size, num_beams, -1, 768)
+        questions_states =   questions_output.last_hidden_state.repeat_interleave(num_beams, dim=0)#.reshape(batch_size, num_beams, -1, 768)
             #.numpy(force=True)
 
         return questions_states
