@@ -254,7 +254,7 @@ def get_pre_data(now_left,len2send):
             data2send.append(now_left[0])
             now_left=now_left[1:]
         i+=len(data2send[-1])
-    return data2send
+    return torch.cat(data2send,dim=0)
     
 def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait_ready):
     try:
@@ -279,7 +279,7 @@ def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
                     now_left.append(pre_queue.get(block=True)[1])
                     lbs+=len(now_left[-1])
 
-                images_embeds=torch.cat(get_pre_data(now_left,len(questions)),dim=0)
+                images_embeds=get_pre_data(now_left,len(questions))
                 lbs-=len(questions)
 
                 # start_time=time.perf_counter()
@@ -299,28 +299,6 @@ def blip_vqa_text_encoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
         print("blip_vqa_text_encoder_engine exit..................................................")
         return 
 
-# Function to pad tensor on the left side
-def pad_tensor(tensor, max_dim):
-    pad_size = max_dim - tensor.shape[2]
-    padded_tensor = F.pad(tensor, (0, 0, pad_size, 0))
-    mask=torch.ones(tensor.shape[0],max_dim)
-    mask[:pad_size]=0
-    return padded_tensor,mask
-    
-def pad_concate(data2send):
-    max_len=max(d.shape[2] for d in data2send)
-
-    mask_list=[]
-    for i in range(len(data2send)):
-        data2send[i],mask=pad_tensor(data2send[i],max_len)
-        mask_list.append(mask)
-
-    questions_states=torch.cat(data2send,dim=0)
-    questions_atts=torch.cat(mask_list,dim=0)
-
-    return questions_states,questions_atts
-
-   
 def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait_ready):
     try:
         model_url = root_path+"pretrained/model_base_vqa_capfilt_large.pth"
@@ -331,9 +309,7 @@ def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
             questions_states=torch.load(root_path+"pretrained/questions_states.pth")
             questions_states=questions_states.repeat(questions_states.shape[0]*32,*tuple([1]*len(questions_states.shape[1:])))
 
-            questions_atts_shape=(questions_states.shape[0]*questions_states.shape[1],questions_states.shape[2])
-            questions_atts = torch.ones(questions_atts_shape, dtype=torch.long)
-            model(questions_states,questions_atts)
+            model(questions_states)
             torch.cuda.synchronize()
             wait_ready.put(0,block=False)
 
@@ -346,34 +322,17 @@ def blip_vqa_text_decoder_engine(c2e,e2c,pre_queue,bs2e,output_queue,e_time,wait
                     now_left.append(pre_queue.get(block=True)[1])
                     lbs+=len(now_left[-1])
 
-                start=time.perf_counter()
-
-                data2send=get_pre_data(now_left,len(ids))
-
-                end=time.perf_counter()
-                print(f"get_pre_data:{end-start}")
-                start=end
-
-                questions_states,questions_atts=pad_concate(data2send)
+                questions_states=get_pre_data(now_left,len(ids))
                 lbs-=len(ids)
 
-                end=time.perf_counter()
-                print(f"pad_concate:{end-start}")
-                start=end
-
                 # start_time=time.perf_counter()
-                datas=model(questions_states, questions_atts)
+                datas=model(questions_states)
                 
                 # add cache into ids and datas
                 output_queue.put([ids,datas],block=False) 
 
                 torch.cuda.synchronize()
-
                 e_time.put([ids,time.perf_counter()],block=False) 
-                
-                end=time.perf_counter()
-                print(f"model:{end-start},{questions_states.shape}")
-                start=end
 
                 # print(f"batch size of blip_vqa_visual_encoder={len(datas)}")
                 
